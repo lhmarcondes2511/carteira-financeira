@@ -1,0 +1,28 @@
+# Dockerfile.dev
+FROM node:18
+
+WORKDIR /app
+
+# Instalar dependências do sistema
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+
+# Limpar cache do npm e node_modules
+RUN rm -rf node_modules package-lock.json
+
+# Instalar dependências
+RUN npm install
+
+# Reconstruir bcrypt especificamente
+RUN npm rebuild bcrypt --build-from-source
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "start:dev"]
