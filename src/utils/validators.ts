@@ -19,22 +19,3 @@ export function IsStrongPassword(validationOptions?: ValidationOptions) {
         });
     };
 }
-
-export function IsPositiveNumber(validationOptions?: ValidationOptions) {
-    return function (object: Object, propertyName: string) {
-        registerDecorator({
-            name: 'isPositiveNumber',
-            target: object.constructor,
-            propertyName: propertyName,
-            options: validationOptions,
-            validator: {
-                validate(value: any, args: ValidationArguments) {
-                    return typeof value === 'number' && value > 0;
-                },
-                defaultMessage(args: ValidationArguments) {
-                    return `${args.property} must be a positive number`;
-                },
-            },
-        });
-    };
-}
