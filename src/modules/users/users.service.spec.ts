@@ -5,10 +5,12 @@ import { User } from 'src/modules/users/entities/user.entity';
 import { Repository } from 'typeorm';
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { MetricsService } from '../metrics/metrics.service';
 
 describe('UsersService', () => {
     let service: UsersService;
     let repository: Repository<User>;
+    let metricsService: MetricsService;
 
     const mockRepository = {
         create: jest.fn(),
@@ -16,6 +18,10 @@ describe('UsersService', () => {
         findOne: jest.fn(),
         find: jest.fn(),
         delete: jest.fn(),
+    };
+
+    const mockMetricsService = {
+        incrementUserOperations: jest.fn(),
     };
 
     beforeEach(async () => {
@@ -26,11 +32,16 @@ describe('UsersService', () => {
                     provide: getRepositoryToken(User),
                     useValue: mockRepository,
                 },
+                {
+                    provide: MetricsService,
+                    useValue: mockMetricsService,
+                },
             ],
         }).compile();
 
         service = module.get<UsersService>(UsersService);
         repository = module.get<Repository<User>>(getRepositoryToken(User));
+        metricsService = module.get<MetricsService>(MetricsService);
         jest.clearAllMocks();
     });
 
@@ -62,6 +73,7 @@ describe('UsersService', () => {
             expect(result).not.toHaveProperty('password');
             expect(result.username).toBe(createUserDto.username);
             expect(result.balance).toBe(0);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('create', 'success');
         });
 
         it('should throw ConflictException if username exists', async () => {
@@ -69,6 +81,7 @@ describe('UsersService', () => {
 
             await expect(service.create(createUserDto))
                 .rejects.toThrow(ConflictException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('create', 'failed');
         });
     });
 
@@ -94,6 +107,7 @@ describe('UsersService', () => {
             expect(result).not.toHaveProperty('password');
             expect(result.username).toBe(user.username);
             expect(result.balance).toBe(100);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findOne', 'success');
         });
 
         it('should throw NotFoundException if user not found', async () => {
@@ -101,11 +115,13 @@ describe('UsersService', () => {
 
             await expect(service.findOne(validUuid))
                 .rejects.toThrow(NotFoundException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findOne', 'notFound');
         });
 
         it('should throw BadRequestException if invalid uuid', async () => {
             await expect(service.findOne('invalid-id'))
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findOne', 'failed');
         });
     });
 
@@ -138,6 +154,7 @@ describe('UsersService', () => {
             expect(result.username).toBe(updateUserDto.username);
             expect(result).not.toHaveProperty('password');
             expect(result.balance).toBe(100);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('update', 'success');
         });
 
         it('should update password successfully', async () => {
@@ -161,11 +178,24 @@ describe('UsersService', () => {
 
             expect(result).not.toHaveProperty('password');
             expect(result.username).toBe(existingUser.username);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('update', 'success');
         });
 
         it('should throw BadRequestException if no updates provided', async () => {
+            mockRepository.findOne.mockResolvedValue({
+                id: validUuid,
+                username: 'testuser',
+                password: 'oldhash',
+                balance: 100,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                sentTransfers: [],
+                receivedTransfers: []
+            });
+
             await expect(service.update(validUuid, {}))
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('update', 'noUpdates');
         });
     });
 
@@ -181,6 +211,7 @@ describe('UsersService', () => {
             const result = await service.findByUsername('testuser');
             expect(result).toBeDefined();
             expect(result.username).toBe(user.username);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findByUsername', 'success');
         });
 
         it('should throw NotFoundException if user not found', async () => {
@@ -188,6 +219,7 @@ describe('UsersService', () => {
 
             await expect(service.findByUsername('nonexistent'))
                 .rejects.toThrow(NotFoundException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findByUsername', 'notFound');
         });
     });
 
@@ -204,6 +236,7 @@ describe('UsersService', () => {
 
             const result = await service.validateUserPassword('testuser', password);
             expect(result).toBeDefined();
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('validatePassword', 'success');
         });
 
         it('should throw BadRequestException for invalid password', async () => {
@@ -216,6 +249,7 @@ describe('UsersService', () => {
 
             await expect(service.validateUserPassword('testuser', 'wrongpassword'))
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('validatePassword', 'invalid');
         });
     });
 
@@ -253,6 +287,7 @@ describe('UsersService', () => {
             expect(result[1]).not.toHaveProperty('password');
             expect(result[0].username).toBe('user1');
             expect(result[1].username).toBe('user2');
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findAll', 'success');
         });
 
         it('should return an empty array if no users found', async () => {
@@ -261,12 +296,14 @@ describe('UsersService', () => {
             const result = await service.findAll();
 
             expect(result).toEqual([]);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findAll', 'success');
         });
 
         it('should throw BadRequestException if error occurs', async () => {
             mockRepository.find.mockRejectedValue(new Error('Database error'));
 
             await expect(service.findAll()).rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findAll', 'failed');
         });
     });
 
@@ -277,22 +314,26 @@ describe('UsersService', () => {
             mockRepository.delete.mockResolvedValue({ affected: 1 });
 
             await expect(service.remove(validUuid)).resolves.not.toThrow();
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('remove', 'success');
         });
 
         it('should throw NotFoundException if user not found', async () => {
             mockRepository.delete.mockResolvedValue({ affected: 0 });
 
             await expect(service.remove(validUuid)).rejects.toThrow(NotFoundException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('remove', 'notFound');
         });
 
         it('should throw BadRequestException if invalid uuid', async () => {
             await expect(service.remove('invalid-id')).rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('remove', 'failed');
         });
 
         it('should throw BadRequestException if error occurs', async () => {
             mockRepository.delete.mockRejectedValue(new Error('Database error'));
 
             await expect(service.remove(validUuid)).rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('remove', 'failed');
         });
     });
 });

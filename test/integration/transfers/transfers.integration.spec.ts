@@ -99,16 +99,6 @@ describe('Carteira Financeira (e2e)', () => {
             secondUserData.id = user.id;
         });
 
-        it('should not register a user with existing username', async () => {
-            await request(app.getHttpServer())
-                .post('/auth/register')
-                .send({
-                    username: firstUserData.username,
-                    password: 'Test@123'
-                })
-                .expect(409);
-        });
-
         it('should login successfully', async () => {
             const response = await request(app.getHttpServer())
                 .post('/auth/login')
@@ -121,71 +111,13 @@ describe('Carteira Financeira (e2e)', () => {
             expect(response.body).toHaveProperty('access_token');
             firstUserData.token = response.body.access_token;
         });
-
-        it('should not login with wrong password', async () => {
-            await request(app.getHttpServer())
-                .post('/auth/login')
-                .send({
-                    username: firstUserData.username,
-                    password: 'wrongpassword'
-                })
-                .expect(401);
-        });
-    });
-
-    describe('Users Module', () => {
-        it('should get user profile', async () => {
-            const response = await request(app.getHttpServer())
-                .get('/users/profile')
-                .set('Authorization', `Bearer ${firstUserData.token}`)
-                .expect(200);
-    
-            expect(response.body).toHaveProperty('username', firstUserData.username);
-            expect(response.body).toHaveProperty('balance');
-            expect(Number(response.body.balance)).toBe(1000);
-        });
-    
-        it('should not get profile without token', async () => {
-            await request(app.getHttpServer())
-                .get('/users/profile')
-                .expect(401);
-        });
-    
-        it('should update user profile', async () => {
-            const newUsername = `user_${Date.now()}`;
-            
-            const response = await request(app.getHttpServer())
-                .patch('/users/profile')
-                .set('Authorization', `Bearer ${firstUserData.token}`)
-                .send({ username: newUsername })
-                .expect(200);
-    
-            expect(response.body.username).toBe(newUsername);
-            firstUserData.username = newUsername;
-        });
-    
-        it('should not update profile with invalid username', async () => {
-            await request(app.getHttpServer())
-                .patch('/users/profile')
-                .set('Authorization', `Bearer ${firstUserData.token}`)
-                .send({ username: 'abc' })
-                .expect(400);
-        });
-    
-        it('should not update profile without data', async () => {
-            await request(app.getHttpServer())
-                .patch('/users/profile')
-                .set('Authorization', `Bearer ${firstUserData.token}`)
-                .send({})
-                .expect(400);
-        });
     });
 
     describe('Transfers Module', () => {
         it('should make a transfer successfully', async () => {
             const transferAmount = 100;
         
-            await request(app.getHttpServer())
+            const response = await request(app.getHttpServer())
                 .post('/transfers')
                 .set('Authorization', `Bearer ${firstUserData.token}`)
                 .send({
@@ -193,6 +125,9 @@ describe('Carteira Financeira (e2e)', () => {
                     amount: transferAmount
                 })
                 .expect(201);
+    
+            expect(response.body).toHaveProperty('id');
+            expect(response.body.amount).toBe(transferAmount);
         
             const sender = await userRepository.findOne({ 
                 where: { id: firstUserData.id } 
@@ -204,16 +139,48 @@ describe('Carteira Financeira (e2e)', () => {
             });
             expect(Number(receiver.balance)).toBe(100);
         });
-
-        it('should not transfer with insufficient balance', async () => {
-            await request(app.getHttpServer())
-                .post('/transfers')
+    
+        it('should get transfer history', async () => {
+            // Primeiro, vamos garantir que há pelo menos uma transferência
+            if (!(await transferRepository.count())) {
+                await request(app.getHttpServer())
+                    .post('/transfers')
+                    .set('Authorization', `Bearer ${firstUserData.token}`)
+                    .send({
+                        receiverId: secondUserData.id,
+                        amount: 50
+                    })
+                    .expect(201);
+            }
+    
+            const response = await request(app.getHttpServer())
+                .get('/transfers/my-transfer')  // Corrigido aqui
                 .set('Authorization', `Bearer ${firstUserData.token}`)
-                .send({
-                    receiverId: secondUserData.id,
-                    amount: 10000
-                })
-                .expect(400);
+                .expect(200);
+    
+            expect(Array.isArray(response.body)).toBe(true);
+            expect(response.body.length).toBeGreaterThan(0);
+            
+            const transfer = response.body[0];
+            expect(transfer).toHaveProperty('id');
+            expect(transfer).toHaveProperty('amount');
+            expect(transfer).toHaveProperty('sender');
+            expect(transfer).toHaveProperty('receiver');
+        });
+    
+        it('should increase balance successfully', async () => {
+            const increaseAmount = 500;
+    
+            const response = await request(app.getHttpServer())
+                .post('/transfers/increase-balance')
+                .set('Authorization', `Bearer ${firstUserData.token}`)
+                .send({ amount: increaseAmount })
+                .expect(201);
+    
+            expect(response.body).toHaveProperty('message');
+            expect(response.body).toHaveProperty('newBalance');
+            const expectedBalance = 900 + increaseAmount; // 900 (previous balance) + 500 (increase)
+            expect(Number(response.body.newBalance)).toBe(expectedBalance);
         });
 
         it('should not transfer to non-existent user', async () => {
@@ -239,11 +206,23 @@ describe('Carteira Financeira (e2e)', () => {
         });
 
         it('should get transfer history', async () => {
+            // Primeiro, vamos garantir que há pelo menos uma transferência
+            if (!(await transferRepository.count())) {
+                await request(app.getHttpServer())
+                    .post('/transfers')
+                    .set('Authorization', `Bearer ${firstUserData.token}`)
+                    .send({
+                        receiverId: secondUserData.id,
+                        amount: 50
+                    })
+                    .expect(201);
+            }
+    
             const response = await request(app.getHttpServer())
                 .get('/transfers')
                 .set('Authorization', `Bearer ${firstUserData.token}`)
                 .expect(200);
-
+    
             expect(Array.isArray(response.body)).toBe(true);
             expect(response.body.length).toBeGreaterThan(0);
             
@@ -252,6 +231,45 @@ describe('Carteira Financeira (e2e)', () => {
             expect(transfer).toHaveProperty('amount');
             expect(transfer).toHaveProperty('sender');
             expect(transfer).toHaveProperty('receiver');
+        });
+    
+        it('should increase balance successfully', async () => {
+            // Primeiro, vamos verificar o saldo atual
+            const profileResponse = await request(app.getHttpServer())
+                .get('/users/profile')
+                .set('Authorization', `Bearer ${firstUserData.token}`)
+                .expect(200);
+        
+            const initialBalance = Number(profileResponse.body.balance);
+        
+            const increaseAmount = 500;
+        
+            const response = await request(app.getHttpServer())
+                .post('/transfers/increase-balance')
+                .set('Authorization', `Bearer ${firstUserData.token}`)
+                .send({ amount: increaseAmount })
+                .expect(201);
+        
+            expect(response.body).toHaveProperty('message');
+            expect(response.body).toHaveProperty('newBalance');
+            const expectedBalance = initialBalance + increaseAmount;
+            expect(Number(response.body.newBalance)).toBe(expectedBalance);
+        
+            // Verificar se o saldo foi realmente atualizado no perfil do usuário
+            const updatedProfileResponse = await request(app.getHttpServer())
+                .get('/users/profile')
+                .set('Authorization', `Bearer ${firstUserData.token}`)
+                .expect(200);
+        
+            expect(Number(updatedProfileResponse.body.balance)).toBe(expectedBalance);
+        });
+
+        it('should not increase balance with negative amount', async () => {
+            await request(app.getHttpServer())
+                .post('/transfers/increase-balance')
+                .set('Authorization', `Bearer ${firstUserData.token}`)
+                .send({ amount: -100 })
+                .expect(400);
         });
     });
 

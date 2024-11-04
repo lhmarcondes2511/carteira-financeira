@@ -5,11 +5,12 @@ import { User } from 'src/modules/users/entities/user.entity';
 import { Repository } from 'typeorm';
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { validate as isUUID } from 'uuid';
+import { MetricsService } from 'src/modules/metrics/metrics.service';
 
 describe('UsersService', () => {
     let service: UsersService;
     let repository: Repository<User>;
+    let metricsService: MetricsService;
 
     const mockRepository = {
         create: jest.fn(),
@@ -20,6 +21,10 @@ describe('UsersService', () => {
         update: jest.fn(),
     };
 
+    const mockMetricsService = {
+        incrementUserOperations: jest.fn(),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -28,11 +33,16 @@ describe('UsersService', () => {
                     provide: getRepositoryToken(User),
                     useValue: mockRepository,
                 },
+                {
+                    provide: MetricsService,
+                    useValue: mockMetricsService,
+                },
             ],
         }).compile();
 
         service = module.get<UsersService>(UsersService);
         repository = module.get<Repository<User>>(getRepositoryToken(User));
+        metricsService = module.get<MetricsService>(MetricsService);
         jest.clearAllMocks();
     });
 
@@ -64,6 +74,7 @@ describe('UsersService', () => {
             expect(result).not.toHaveProperty('password');
             expect(result.username).toBe(createUserDto.username);
             expect(result.balance).toBe(0);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('create', 'success');
         });
 
         it('should throw ConflictException if username exists', async () => {
@@ -71,6 +82,7 @@ describe('UsersService', () => {
 
             await expect(service.create(createUserDto))
                 .rejects.toThrow(ConflictException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('create', 'failed');
         });
 
         it('should throw BadRequestException on error', async () => {
@@ -78,6 +90,7 @@ describe('UsersService', () => {
 
             await expect(service.create(createUserDto))
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('create', 'failed');
         });
     });
 
@@ -111,6 +124,7 @@ describe('UsersService', () => {
                 expect(user).not.toHaveProperty('password');
                 expect(typeof user.balance).toBe('number');
             });
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findAll', 'success');
         });
 
         it('should throw BadRequestException on error', async () => {
@@ -118,6 +132,7 @@ describe('UsersService', () => {
 
             await expect(service.findAll())
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findAll', 'failed');
         });
     });
 
@@ -143,12 +158,14 @@ describe('UsersService', () => {
             expect(result).not.toHaveProperty('password');
             expect(result.username).toBe(user.username);
             expect(result.balance).toBe(100);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findOne', 'success');
         });
 
         it('should throw BadRequestException for invalid UUID', async () => {
             await expect(service.findOne('invalid-id'))
                 .rejects.toThrow(BadRequestException);
             expect(mockRepository.findOne).not.toHaveBeenCalled();
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findOne', 'failed');
         });
 
         it('should throw NotFoundException if user not found', async () => {
@@ -156,6 +173,7 @@ describe('UsersService', () => {
 
             await expect(service.findOne(validUuid))
                 .rejects.toThrow(NotFoundException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('findOne', 'notFound');
         });
     });
 
@@ -195,11 +213,13 @@ describe('UsersService', () => {
             expect(result.username).toBe(updateUserDto.username);
             expect(result).not.toHaveProperty('password');
             expect(result.balance).toBe(100);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('update', 'success');
         });
 
         it('should throw BadRequestException for invalid UUID', async () => {
             await expect(service.update('invalid-id', updateUserDto))
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('update', 'failed');
         });
 
         it('should throw NotFoundException if user not found', async () => {
@@ -207,6 +227,7 @@ describe('UsersService', () => {
 
             await expect(service.update(validUuid, updateUserDto))
                 .rejects.toThrow(NotFoundException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('update', 'notFound');
         });
 
         it('should throw ConflictException if new username exists', async () => {
@@ -226,6 +247,7 @@ describe('UsersService', () => {
 
             await expect(service.update(validUuid, { username: updateUserDto.username }))
                 .rejects.toThrow(ConflictException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('update', 'failed');
         });
     });
 
@@ -244,6 +266,7 @@ describe('UsersService', () => {
             const result = await service.validateUserPassword('testuser', password);
             expect(result).toBeDefined();
             expect(result.username).toBe(user.username);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('validatePassword', 'success');
         });
 
         it('should throw BadRequestException for invalid credentials', async () => {
@@ -256,6 +279,7 @@ describe('UsersService', () => {
 
             await expect(service.validateUserPassword('testuser', 'wrongpassword'))
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('validatePassword', 'invalid');
         });
 
         it('should throw BadRequestException for non-existent user', async () => {
@@ -263,6 +287,7 @@ describe('UsersService', () => {
 
             await expect(service.validateUserPassword('nonexistent', 'Test@123'))
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('validatePassword', 'failed');
         });
     });
 
@@ -273,11 +298,13 @@ describe('UsersService', () => {
             mockRepository.delete.mockResolvedValue({ affected: 1 });
 
             await expect(service.remove(validUuid)).resolves.not.toThrow();
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('remove', 'success');
         });
 
         it('should throw BadRequestException for invalid UUID', async () => {
             await expect(service.remove('invalid-id'))
                 .rejects.toThrow(BadRequestException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('remove', 'failed');
         });
 
         it('should throw NotFoundException if user not found', async () => {
@@ -285,6 +312,7 @@ describe('UsersService', () => {
 
             await expect(service.remove(validUuid))
                 .rejects.toThrow(NotFoundException);
+            expect(mockMetricsService.incrementUserOperations).toHaveBeenCalledWith('remove', 'notFound');
         });
     });
 });
