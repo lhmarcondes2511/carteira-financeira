@@ -32,29 +32,22 @@ export class TransferReversalService {
             const sender = transfer.sender;
             const receiver = transfer.receiver;
 
-            // Converter o valor da transferência para número
             const amount = Number(transfer.amount);
-
-            // Reverter os saldos, garantindo que sejam tratados como números
             sender.balance = Number(sender.balance) + amount;
             receiver.balance = Number(receiver.balance) - amount;
 
-            // Verificar se o receptor tem saldo suficiente para a reversão
             if (receiver.balance < 0) {
                 throw new BadRequestException('O receptor não tem saldo suficiente para a reversão');
             }
 
-            // Marcar a transferência como revertida
             transfer.isReversed = true;
             transfer.reversalReason = reason;
             transfer.reversalDate = new Date();
 
-            // Salvar todas as alterações
             await transactionalEntityManager.save(sender);
             await transactionalEntityManager.save(receiver);
             await transactionalEntityManager.save(transfer);
 
-            // Criar um novo registro de transferência para a reversão
             const reversalTransfer = this.transferRepository.create({
                 sender: receiver,
                 receiver: sender,

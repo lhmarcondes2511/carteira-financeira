@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { WinstonModule } from 'nest-winston';
@@ -6,13 +6,19 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TransfersModule } from './modules/transfers/transfers.module';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
 import appConfig from './config/app.config';
 import loggingConfig from './config/logging.config';
 import monitoringConfig from './config/monitoring.config';
 import { HealthModule } from './modules/health/health.module';
+import { PrometheusMiddleware } from './common/middlewares/prometheus.middleware';
+import { ThrottlerSkipMetricsGuard } from './common/guards/throttler-skip-metrics.guard';
+import { MetricsModule } from './modules/metrics/metrics.module';
+import { HttpMetricsInterceptor } from './common/interceptors/metrics.interceptor';
+import { LoggingService } from './modules/logging/logging.service';
+import { LoggingModule } from './modules/logging/logging.module';
 
 @Module({
   imports: [
@@ -45,13 +51,25 @@ import { HealthModule } from './modules/health/health.module';
     UsersModule,
     AuthModule,
     TransfersModule,
-    HealthModule
+    HealthModule,
+    LoggingModule,
+    MetricsModule,
   ],
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: ThrottlerSkipMetricsGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpMetricsInterceptor,
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(PrometheusMiddleware)
+      .forRoutes('*');
+  }
+}

@@ -16,6 +16,21 @@ export class TransfersController {
         private readonly transferReversalService: TransferReversalService
     ) { }
 
+    @Get('my-transfer')
+    @ApiOperation({ summary: 'Listar todas as transferências' })
+    @ApiResponse({ status: 200, description: 'Retorna todas as transferências' })
+    getMyTransfer(@Request() req): Promise<ITransfer[]> {
+        return this.transfersService.findMyTransfers(req.user.userId);
+    }
+
+    @Get(':id')
+    @ApiOperation({ summary: 'Buscar uma transferência por ID' })
+    @ApiResponse({ status: 200, description: 'Retorna a transferência solicitada' })
+    @ApiResponse({ status: 404, description: 'Transferência não encontrada' })
+    findOne(@Param('id') id: string): Promise<ITransfer> {
+        return this.transfersService.findOne(id);
+    }
+
     @Post()
     @ApiOperation({ summary: 'Criar uma nova transferência' })
     @ApiBody({
@@ -30,6 +45,7 @@ export class TransfersController {
             }
         }
     })
+
     @ApiResponse({ status: 201, description: 'Transferência criada com sucesso' })
     @ApiResponse({ status: 400, description: 'Requisição inválida' })
     @ApiResponse({ status: 404, description: 'Usuário não encontrado' })
@@ -55,21 +71,6 @@ export class TransfersController {
         }
     }
 
-    @Get()
-    @ApiOperation({ summary: 'Listar todas as transferências' })
-    @ApiResponse({ status: 200, description: 'Retorna todas as transferências' })
-    findAll(): Promise<ITransfer[]> {
-        return this.transfersService.findAll();
-    }
-
-    @Get(':id')
-    @ApiOperation({ summary: 'Buscar uma transferência por ID' })
-    @ApiResponse({ status: 200, description: 'Retorna a transferência solicitada' })
-    @ApiResponse({ status: 404, description: 'Transferência não encontrada' })
-    findOne(@Param('id') id: string): Promise<ITransfer> {
-        return this.transfersService.findOne(id);
-    }
-
     @Post(':id/reverse')
     @ApiOperation({ summary: 'Reverter uma transferência' })
     @ApiBody({
@@ -84,6 +85,7 @@ export class TransfersController {
             }
         }
     })
+
     @ApiResponse({ status: 200, description: 'Transferência revertida com sucesso' })
     @ApiResponse({ status: 400, description: 'Requisição inválida' })
     @ApiResponse({ status: 404, description: 'Transferência não encontrada' })
@@ -102,9 +104,9 @@ export class TransfersController {
     }
 
     @Post('increase-balance')
-    @ApiOperation({ summary: 'Aumentar o saldo do usuário' })
+    @ApiOperation({ summary: 'Depositar' })
     @ApiBody({
-        description: 'Dados para aumentar o saldo',
+        description: 'Dados para depositar',
         schema: {
             type: 'object',
             properties: {
@@ -115,13 +117,13 @@ export class TransfersController {
             }
         }
     })
-    @ApiResponse({ status: 200, description: 'Saldo aumentado com sucesso' })
+    @ApiResponse({ status: 200, description: 'Depósito feito com sucesso' })
     @ApiResponse({ status: 400, description: 'Requisição inválida' })
     async increaseBalance(@Request() req, @Body('amount') amount: number) {
         try {
             const updatedUser = await this.transfersService.increaseBalance(req.user.userId, amount);
             return {
-                message: 'Saldo aumentado com sucesso',
+                message: 'Depósito feito com sucesso',
                 newBalance: updatedUser.balance
             };
         } catch (error) {

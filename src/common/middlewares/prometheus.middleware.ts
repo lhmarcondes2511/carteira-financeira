@@ -1,22 +1,22 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { ConfigService } from '@nestjs/config';
-import { Registry } from 'prom-client';
+import { MetricsService } from '../../modules/metrics/metrics.service';
 
 @Injectable()
 export class PrometheusMiddleware implements NestMiddleware {
-    private readonly register: Registry;
+  constructor(private metricsService: MetricsService) {}
 
-    constructor(private configService: ConfigService) {
-        this.register = this.configService.get('monitoring').register;
-    }
-
-    use(req: Request, res: Response, next: NextFunction) {
-        if (req.path === '/metrics') {
-            res.setHeader('Content-Type', this.register.contentType);
-            this.register.metrics().then(data => res.end(data));
-        } else {
-            next();
-        }
-    }
+  use(req: Request, res: Response, next: NextFunction) {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      this.metricsService.recordHttpRequestDuration(
+        req.method,
+        req.route?.path || req.path,
+        res.statusCode,
+        duration / 1000
+      );
+    });
+    next();
+  }
 }
