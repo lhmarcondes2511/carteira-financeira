@@ -22,41 +22,44 @@ export class TransferReversalService {
             });
 
             if (!transfer) {
-                throw new NotFoundException('Transfer not found');
+                throw new NotFoundException('Transferência não encontrada');
             }
 
             if (transfer.isReversed) {
-                throw new BadRequestException('This transfer has already been reversed');
+                throw new BadRequestException('Esta transferência já foi revertida');
             }
 
             const sender = transfer.sender;
             const receiver = transfer.receiver;
 
-            // Reverse the balances
-            sender.balance += transfer.amount;
-            receiver.balance -= transfer.amount;
+            // Converter o valor da transferência para número
+            const amount = Number(transfer.amount);
 
-            // Check if receiver has enough balance for the reversal
+            // Reverter os saldos, garantindo que sejam tratados como números
+            sender.balance = Number(sender.balance) + amount;
+            receiver.balance = Number(receiver.balance) - amount;
+
+            // Verificar se o receptor tem saldo suficiente para a reversão
             if (receiver.balance < 0) {
-                throw new BadRequestException('Receiver does not have enough balance for reversal');
+                throw new BadRequestException('O receptor não tem saldo suficiente para a reversão');
             }
 
-            // Mark the transfer as reversed
+            // Marcar a transferência como revertida
             transfer.isReversed = true;
             transfer.reversalReason = reason;
             transfer.reversalDate = new Date();
 
-            // Save all changes
+            // Salvar todas as alterações
             await transactionalEntityManager.save(sender);
             await transactionalEntityManager.save(receiver);
             await transactionalEntityManager.save(transfer);
 
-            // Create a new transfer record for the reversal
+            // Criar um novo registro de transferência para a reversão
             const reversalTransfer = this.transferRepository.create({
                 sender: receiver,
                 receiver: sender,
-                amount: transfer.amount,
-                description: `Reversal of transfer ${transferId}: ${reason}`,
+                amount: amount,
+                description: `Reversão da transferência ${transferId}: ${reason}`,
                 originalTransfer: transfer,
             });
 

@@ -71,6 +71,25 @@ export class TransfersService {
         return this.mapTransferToInterface(transfer);
     }
 
+    async increaseBalance(userId: string, amount: number): Promise<IUser> {
+        if (amount <= 0) {
+            throw new BadRequestException('O valor deve ser positivo');
+        }
+
+        return this.connection.transaction(async manager => {
+            const user = await manager.findOne(User, { where: { id: userId } });
+
+            if (!user) {
+                throw new NotFoundException('Usuário não encontrado');
+            }
+
+            user.balance = Number(user.balance) + Number(amount);
+            await manager.save(user);
+
+            return this.mapUserToInterface(user);
+        });
+    }
+
     private mapTransferToInterface(transfer: Transfer): ITransfer {
         return {
             id: transfer.id,

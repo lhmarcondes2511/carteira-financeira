@@ -218,4 +218,81 @@ describe('UsersService', () => {
                 .rejects.toThrow(BadRequestException);
         });
     });
+
+    describe('findAll', () => {
+        it('should return an array of users', async () => {
+            const users = [
+                {
+                    id: '123e4567-e89b-12d3-a456-426614174000',
+                    username: 'user1',
+                    password: 'hashedpassword1',
+                    balance: 100,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    sentTransfers: [],
+                    receivedTransfers: []
+                },
+                {
+                    id: '223e4567-e89b-12d3-a456-426614174000',
+                    username: 'user2',
+                    password: 'hashedpassword2',
+                    balance: 200,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    sentTransfers: [],
+                    receivedTransfers: []
+                }
+            ];
+
+            mockRepository.find.mockResolvedValue(users);
+
+            const result = await service.findAll();
+
+            expect(result).toHaveLength(2);
+            expect(result[0]).not.toHaveProperty('password');
+            expect(result[1]).not.toHaveProperty('password');
+            expect(result[0].username).toBe('user1');
+            expect(result[1].username).toBe('user2');
+        });
+
+        it('should return an empty array if no users found', async () => {
+            mockRepository.find.mockResolvedValue([]);
+
+            const result = await service.findAll();
+
+            expect(result).toEqual([]);
+        });
+
+        it('should throw BadRequestException if error occurs', async () => {
+            mockRepository.find.mockRejectedValue(new Error('Database error'));
+
+            await expect(service.findAll()).rejects.toThrow(BadRequestException);
+        });
+    });
+
+    describe('remove', () => {
+        const validUuid = '123e4567-e89b-12d3-a456-426614174000';
+
+        it('should remove a user successfully', async () => {
+            mockRepository.delete.mockResolvedValue({ affected: 1 });
+
+            await expect(service.remove(validUuid)).resolves.not.toThrow();
+        });
+
+        it('should throw NotFoundException if user not found', async () => {
+            mockRepository.delete.mockResolvedValue({ affected: 0 });
+
+            await expect(service.remove(validUuid)).rejects.toThrow(NotFoundException);
+        });
+
+        it('should throw BadRequestException if invalid uuid', async () => {
+            await expect(service.remove('invalid-id')).rejects.toThrow(BadRequestException);
+        });
+
+        it('should throw BadRequestException if error occurs', async () => {
+            mockRepository.delete.mockRejectedValue(new Error('Database error'));
+
+            await expect(service.remove(validUuid)).rejects.toThrow(BadRequestException);
+        });
+    });
 });
