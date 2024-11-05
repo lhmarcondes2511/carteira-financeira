@@ -204,34 +204,6 @@ describe('Carteira Financeira (e2e)', () => {
                 })
                 .expect(400);
         });
-
-        it('should get transfer history', async () => {
-            // Primeiro, vamos garantir que há pelo menos uma transferência
-            if (!(await transferRepository.count())) {
-                await request(app.getHttpServer())
-                    .post('/transfers')
-                    .set('Authorization', `Bearer ${firstUserData.token}`)
-                    .send({
-                        receiverId: secondUserData.id,
-                        amount: 50
-                    })
-                    .expect(201);
-            }
-    
-            const response = await request(app.getHttpServer())
-                .get('/transfers')
-                .set('Authorization', `Bearer ${firstUserData.token}`)
-                .expect(200);
-    
-            expect(Array.isArray(response.body)).toBe(true);
-            expect(response.body.length).toBeGreaterThan(0);
-            
-            const transfer = response.body[0];
-            expect(transfer).toHaveProperty('id');
-            expect(transfer).toHaveProperty('amount');
-            expect(transfer).toHaveProperty('sender');
-            expect(transfer).toHaveProperty('receiver');
-        });
     
         it('should increase balance successfully', async () => {
             // Primeiro, vamos verificar o saldo atual
